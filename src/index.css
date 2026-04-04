@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+.leaflet-popup-content-wrapper {
+  border-radius: 0.75rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.leaflet-popup-content {
+  margin: 10px;
+  width: auto !important;
+}
+
+.leaflet-container {
+  font-family: inherit;
+}

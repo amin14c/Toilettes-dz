@@ -1,0 +1,5 @@
+{
+  "name": "أقرب مرحاض",
+  "description": "تطبيق لإيجاد أقرب مرحاض عمومي باستخدام تحديد الموقع.",
+  "requestFramePermissions": ["geolocation"]
+}
