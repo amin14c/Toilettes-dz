@@ -4,13 +4,40 @@
  */
 
 import { useState, useEffect } from 'react';
-import { MapPin, Navigation, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, Navigation, AlertCircle, Loader2, LogIn, LogOut, User as UserIcon } from 'lucide-react';
 import MapView from './components/MapView';
+import { auth, googleProvider } from './firebase';
+import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 
 export default function App() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Error signing in with Google", error);
+      alert("حدث خطأ أثناء تسجيل الدخول");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out", error);
+    }
+  };
 
   const requestLocation = () => {
     setLoading(true);
@@ -32,7 +59,12 @@ export default function App() {
       },
       (err) => {
         console.error(err);
-        setError('تعذر الحصول على موقعك. يرجى التأكد من تفعيل خدمة تحديد الموقع (GPS) ومنح الصلاحية للتطبيق.');
+        setError('تعذر الحصول على موقعك. يرجى التأكد من تفعيل خدمة تحديد الموقع (GPS).');
+        // Fallback to Algiers, Algeria if location is denied or fails
+        setLocation({
+          lat: 36.7538,
+          lng: 3.0588
+        });
         setLoading(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -52,13 +84,42 @@ export default function App() {
           <MapPin className="w-6 h-6" />
           <h1 className="text-xl font-bold">أقرب مرحاض</h1>
         </div>
-        <button 
-          onClick={requestLocation}
-          className="p-2 bg-blue-700 rounded-full hover:bg-blue-800 transition-colors"
-          title="تحديث الموقع"
-        >
-          <Navigation className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-3">
+          {user ? (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-blue-700 px-3 py-1.5 rounded-full">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                ) : (
+                  <UserIcon className="w-5 h-5" />
+                )}
+                <span className="text-sm font-medium hidden sm:inline-block">{user.displayName || 'مستخدم'}</span>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="p-2 bg-blue-700 rounded-full hover:bg-red-600 transition-colors"
+                title="تسجيل الخروج"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleLogin}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-full hover:bg-gray-100 transition-colors font-medium text-sm shadow-sm"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>تسجيل الدخول</span>
+            </button>
+          )}
+          <button 
+            onClick={requestLocation}
+            className="p-2 bg-blue-700 rounded-full hover:bg-blue-800 transition-colors"
+            title="تحديث الموقع"
+          >
+            <Navigation className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -84,7 +145,7 @@ export default function App() {
         )}
 
         {location && (
-          <MapView userLocation={location} />
+          <MapView userLocation={location} user={user} />
         )}
       </main>
     </div>

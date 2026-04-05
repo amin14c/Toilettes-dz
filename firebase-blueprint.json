@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "CustomToilet": {
+      "title": "Custom Toilet",
+      "description": "A toilet added by a user",
+      "type": "object",
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "name": { "type": "string" },
+        "fee": { "type": "string" },
+        "wheelchair": { "type": "string" },
+        "addedBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["lat", "lng", "name", "addedBy", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A user review for a toilet",
+      "type": "object",
+      "properties": {
+        "toiletId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["toiletId", "userId", "userName", "rating", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/toilets/{toiletId}": {
+      "schema": { "$ref": "#/entities/CustomToilet" },
+      "description": "Custom toilets added by users"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "User reviews for toilets"
+    }
+  }
+}

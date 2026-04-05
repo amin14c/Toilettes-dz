@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    match /toilets/{toiletId} {
+      allow read: if true;
+      allow create: if isAuthenticated() 
+        && hasRequiredFields(['lat', 'lng', 'name', 'addedBy', 'createdAt'])
+        && request.resource.data.lat is number
+        && request.resource.data.lng is number
+        && isValidString(request.resource.data.name, 1, 100)
+        && request.resource.data.addedBy == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.addedBy);
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated()
+        && hasRequiredFields(['toiletId', 'userId', 'userName', 'rating', 'createdAt'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5;
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+  }
+}
