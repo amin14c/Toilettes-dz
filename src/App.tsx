@@ -6,30 +6,35 @@
 import { useState, useEffect } from 'react';
 import { MapPin, Navigation, AlertCircle, Loader2, LogIn, LogOut, User as UserIcon } from 'lucide-react';
 import MapView from './components/MapView';
+import AuthModal from './components/AuthModal';
 import { auth, googleProvider } from './firebase';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
     });
+
+    // Handle redirect result for mobile
+    getRedirectResult(auth).then((result) => {
+      if (result) {
+        setUser(result.user);
+      }
+    }).catch((error) => {
+      console.error("Error during redirect sign in:", error);
+      alert("حدث خطأ أثناء تسجيل الدخول: " + error.message);
+    });
+
     return () => unsubscribe();
   }, []);
-
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Error signing in with Google", error);
-      alert("حدث خطأ أثناء تسجيل الدخول");
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -105,7 +110,7 @@ export default function App() {
             </div>
           ) : (
             <button 
-              onClick={handleLogin}
+              onClick={() => setShowAuthModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-full hover:bg-gray-100 transition-colors font-medium text-sm shadow-sm"
             >
               <LogIn className="w-4 h-4" />
@@ -148,6 +153,12 @@ export default function App() {
           <MapView userLocation={location} user={user} />
         )}
       </main>
+
+      <AnimatePresence>
+        {showAuthModal && (
+          <AuthModal onClose={() => setShowAuthModal(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
