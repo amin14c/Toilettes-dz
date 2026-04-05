@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { useEffect, useState, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
-import { Navigation, Bath, Coins, Accessibility, CheckCircle, XCircle, Plus, Star } from 'lucide-react';
+import { Navigation, Bath, Coins, Accessibility, CheckCircle, XCircle, Plus, Star, Search } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
@@ -75,14 +75,25 @@ function RecenterAutomatically({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-// Component to handle map clicks for adding toilets
-function MapClickHandler({ isAdding, onLocationSelect }: { isAdding: boolean, onLocationSelect: (latlng: L.LatLng) => void }) {
-  useMapEvents({
+// Component to handle map events (panning, zooming)
+function MapEventsHandler({ 
+  isAdding, 
+  onLocationSelect, 
+  onMapMove 
+}: { 
+  isAdding: boolean; 
+  onLocationSelect: (latlng: L.LatLng) => void;
+  onMapMove: (center: L.LatLng) => void;
+}) {
+  const map = useMapEvents({
     click(e) {
       if (isAdding) {
         onLocationSelect(e.latlng);
       }
     },
+    moveend() {
+      onMapMove(map.getCenter());
+    }
   });
   return null;
 }
@@ -97,6 +108,8 @@ export default function MapView({ userLocation, user }: MapViewProps) {
   const [customToilets, setCustomToilets] = useState<Toilet[]>([]);
   const [loadingToilets, setLoadingToilets] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mapCenter, setMapCenter] = useState<{lat: number, lng: number}>(userLocation);
+  const [showSearchArea, setShowSearchArea] = useState(false);
   
   // Modals state
   const [isAddingMode, setIsAddingMode] = useState(false);
@@ -118,70 +131,83 @@ export default function MapView({ userLocation, user }: MapViewProps) {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const fetchToilets = async () => {
-      setLoadingToilets(true);
-      setError(null);
-      try {
-        // Overpass API query to find toilets within 15km of user location
-        const radius = 15000; // 15km
-        const query = `
-          [out:json][timeout:25];
-          (
-            node["amenity"="toilets"](around:${radius},${userLocation.lat},${userLocation.lng});
-            way["amenity"="toilets"](around:${radius},${userLocation.lat},${userLocation.lng});
-            relation["amenity"="toilets"](around:${radius},${userLocation.lat},${userLocation.lng});
-          );
-          out center;
-        `;
-        
-        const endpoints = [
-          'https://overpass-api.de/api/interpreter',
-          'https://lz4.overpass-api.de/api/interpreter',
-          'https://z.overpass-api.de/api/interpreter',
-          'https://overpass.kumi.systems/api/interpreter'
-        ];
+  const fetchToilets = async (center: {lat: number, lng: number}) => {
+    setLoadingToilets(true);
+    setError(null);
+    setShowSearchArea(false);
+    try {
+      // Overpass API query to find toilets within 15km of the center
+      const radius = 15000; // 15km
+      const query = `
+        [out:json][timeout:25];
+        (
+          node["amenity"="toilets"](around:${radius},${center.lat},${center.lng});
+          way["amenity"="toilets"](around:${radius},${center.lat},${center.lng});
+          relation["amenity"="toilets"](around:${radius},${center.lat},${center.lng});
+        );
+        out center;
+      `;
+      
+      const endpoints = [
+        'https://overpass-api.de/api/interpreter',
+        'https://lz4.overpass-api.de/api/interpreter',
+        'https://z.overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter'
+      ];
 
-        let data = null;
-        let lastError = null;
+      let data = null;
+      let lastError = null;
 
-        for (const endpoint of endpoints) {
-          try {
-            const response = await fetch(`${endpoint}?data=${encodeURIComponent(query)}`);
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            data = await response.json();
-            break; // Success, exit the loop
-          } catch (err) {
-            console.warn(`Endpoint ${endpoint} failed:`, err);
-            lastError = err;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${endpoint}?data=${encodeURIComponent(query)}`);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
+          data = await response.json();
+          break; // Success, exit the loop
+        } catch (err) {
+          console.warn(`Endpoint ${endpoint} failed:`, err);
+          lastError = err;
         }
-
-        if (!data) {
-          throw lastError || new Error('All Overpass API endpoints failed');
-        }
-        
-        const parsedToilets = data.elements.map((el: any) => ({
-          id: el.id,
-          lat: el.type === 'node' ? el.lat : el.center.lat,
-          lon: el.type === 'node' ? el.lon : el.center.lon,
-          tags: el.tags || {},
-          isCustom: false
-        }));
-        
-        setToilets(parsedToilets);
-      } catch (err) {
-        console.error("Error fetching toilets:", err);
-        setError('حدث خطأ أثناء البحث عن المراحيض القريبة.');
-      } finally {
-        setLoadingToilets(false);
       }
-    };
 
+      if (!data) {
+        throw lastError || new Error('All Overpass API endpoints failed');
+      }
+      
+      const parsedToilets = data.elements.map((el: any) => ({
+        id: el.id,
+        lat: el.type === 'node' ? el.lat : el.center.lat,
+        lon: el.type === 'node' ? el.lon : el.center.lon,
+        tags: el.tags || {},
+        isCustom: false
+      }));
+      
+      setToilets(parsedToilets);
+    } catch (err) {
+      console.error("Error fetching toilets:", err);
+      setError('حدث خطأ أثناء البحث عن المراحيض القريبة.');
+    } finally {
+      setLoadingToilets(false);
+    }
+  };
+
+  useEffect(() => {
     if (userLocation) {
-      fetchToilets();
+      fetchToilets(userLocation);
+    }
+  }, [userLocation]);
+
+  const handleMapMove = useCallback((center: L.LatLng) => {
+    setMapCenter({ lat: center.lat, lng: center.lng });
+    // Show "Search this area" button if moved significantly
+    const distance = Math.sqrt(
+      Math.pow(center.lat - userLocation.lat, 2) + 
+      Math.pow(center.lng - userLocation.lng, 2)
+    );
+    if (distance > 0.05) { // Roughly 5km
+      setShowSearchArea(true);
     }
   }, [userLocation]);
 
@@ -227,15 +253,36 @@ export default function MapView({ userLocation, user }: MapViewProps) {
         </div>
       )}
 
+      {/* Search this area button */}
+      {showSearchArea && !loadingToilets && !isAddingMode && (
+        <button
+          onClick={() => fetchToilets(mapCenter)}
+          className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-white text-blue-600 px-5 py-2.5 rounded-full shadow-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-50 transition-colors border border-blue-100"
+        >
+          <Search className="w-4 h-4" />
+          البحث في هذه المنطقة
+        </button>
+      )}
+
       {/* Add Toilet Floating Button */}
       <button
         onClick={handleAddClick}
-        className={`absolute bottom-24 right-4 z-[1000] p-4 rounded-full shadow-xl transition-all flex items-center justify-center ${
+        className={`absolute bottom-8 right-4 sm:bottom-12 sm:right-8 z-[1000] px-6 py-4 rounded-full shadow-2xl transition-all flex items-center justify-center gap-2 font-bold text-base ${
           isAddingMode ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-600 hover:bg-green-700 text-white'
         }`}
         title={isAddingMode ? 'إلغاء الإضافة' : 'إضافة مرحاض جديد'}
       >
-        {isAddingMode ? <XCircle className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+        {isAddingMode ? (
+          <>
+            <XCircle className="w-6 h-6" />
+            <span>إلغاء</span>
+          </>
+        ) : (
+          <>
+            <Plus className="w-6 h-6" />
+            <span>إضافة مرحاض</span>
+          </>
+        )}
       </button>
 
       <MapContainer 
@@ -244,6 +291,7 @@ export default function MapView({ userLocation, user }: MapViewProps) {
         className="w-full h-full z-0"
         zoomControl={false}
       >
+        <ZoomControl position="bottomleft" />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -251,12 +299,13 @@ export default function MapView({ userLocation, user }: MapViewProps) {
         
         <RecenterAutomatically lat={userLocation.lat} lng={userLocation.lng} />
 
-        <MapClickHandler 
+        <MapEventsHandler 
           isAdding={isAddingMode} 
           onLocationSelect={(latlng) => {
             setSelectedLocation({ lat: latlng.lat, lng: latlng.lng });
             setIsAddingMode(false);
-          }} 
+          }}
+          onMapMove={handleMapMove}
         />
 
         {/* User Location Marker */}

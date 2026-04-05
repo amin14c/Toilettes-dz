@@ -82,7 +82,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-gray-900 font-sans" dir="rtl">
+    <div className="flex flex-col h-[100dvh] bg-gray-50 text-gray-900 font-sans" dir="rtl">
       {/* Header */}
       <header className="bg-blue-600 text-white p-4 shadow-md z-10 flex items-center justify-between">
         <div className="flex items-center gap-2">

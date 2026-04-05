@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, Loader2 } from 'lucide-react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
 import { motion } from 'motion/react';
 
@@ -58,10 +58,11 @@ export default function AuthModal({ onClose }: AuthModalProps) {
 
   const handleGoogleAuth = async () => {
     try {
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithPopup(auth, googleProvider);
+      onClose();
     } catch (err: any) {
       console.error("Google auth error:", err);
-      setError("حدث خطأ أثناء تسجيل الدخول بواسطة جوجل.");
+      setError("حدث خطأ أثناء تسجيل الدخول بواسطة جوجل. إذا كنت تستخدم تطبيق الهاتف، يرجى استخدام التسجيل بالبريد الإلكتروني.");
     }
   };
 
